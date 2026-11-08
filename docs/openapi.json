@@ -1,0 +1,422 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Font backend",
+    "description": "Бэкенд сервиса создания шрифтов: загрузка, проверка и хранение файлов шрифтов.\n\nВсе ошибки возвращаются в формате `{\"code\": \"...\", \"message\": \"...\"}`.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Проверка живости",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fonts": {
+      "post": {
+        "tags": [
+          "fonts"
+        ],
+        "summary": "Загрузить шрифт",
+        "description": "Принимает файл шрифта (multipart/form-data, поле `file`), проверяет его и кладёт во хранилище. Возвращает метаданные с `id`.\n\nПроверки по порядку:\n1. Размер не больше лимита (по умолчанию 20 МБ).\n2. Расширение: `.ttf`, `.otf`, `.woff`, `.woff2`.\n3. Формат по первым 4 байтам, а не по расширению.\n4. Полный разбор через fontTools: таблицы `head, maxp, cmap, hhea, hmtx` и наличие глифов.",
+        "operationId": "upload_font_api_fonts_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_font_api_fonts_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FontMeta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`empty_file` или `corrupted_font`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`file_too_large`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_extension` или `unsupported_format` (в т.ч. TTC)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fonts/{font_id}": {
+      "get": {
+        "tags": [
+          "fonts"
+        ],
+        "summary": "Метаданные шрифта",
+        "operationId": "get_font_api_fonts__font_id__get",
+        "parameters": [
+          {
+            "name": "font_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Font Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FontMeta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: нет шрифта с таким id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "fonts"
+        ],
+        "summary": "Удалить шрифт",
+        "description": "Удаляет шрифт вместе с файлом.",
+        "operationId": "delete_font_api_fonts__font_id__delete",
+        "parameters": [
+          {
+            "name": "font_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Font Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fonts/{font_id}/file": {
+      "get": {
+        "tags": [
+          "fonts"
+        ],
+        "summary": "Скачать файл шрифта",
+        "description": "Отдаёт исходный файл с правильным `Content-Type`. Нужен для превью, редактора и анализа.",
+        "operationId": "download_font_api_fonts__font_id__file_get",
+        "parameters": [
+          {
+            "name": "font_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Font Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "font/ttf": {},
+              "font/otf": {},
+              "font/woff": {},
+              "font/woff2": {}
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_upload_font_api_fonts_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Файл шрифта: TTF, OTF, WOFF или WOFF2"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_font_api_fonts_post"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Машиночитаемый код ошибки",
+            "examples": [
+              "corrupted_font"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Сообщение для пользователя",
+            "examples": [
+              "Файл повреждён или не читается как шрифт"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorResponse",
+        "description": "Единый формат ошибки."
+      },
+      "FontMeta": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Идентификатор шрифта, используется во всех остальных запросах"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name",
+            "description": "Имя файла, как его загрузил пользователь (без пути)"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format",
+            "description": "Формат, определённый по содержимому: ttf, otf, woff, woff2"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "MIME-тип, с которым отдаётся файл"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Размер файла в байтах"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Время загрузки (UTC)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "original_name",
+          "format",
+          "content_type",
+          "size",
+          "created_at"
+        ],
+        "title": "FontMeta",
+        "description": "Метаданные загруженного шрифта.",
+        "example": {
+          "content_type": "font/ttf",
+          "created_at": "2026-11-07T07:26:17Z",
+          "format": "ttf",
+          "id": "095de6a3-5119-45bd-85c5-0b1b8088cfa8",
+          "original_name": "MyFont.ttf",
+          "size": 123456
+        }
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "fonts",
+      "description": "Загрузка и хранение шрифтов"
+    },
+    {
+      "name": "health",
+      "description": "Служебное"
+    }
+  ]
+}
